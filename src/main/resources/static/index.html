@@ -134,7 +134,18 @@
     </div>
 
     <script>
-        document.getElementById('passwordForm').addEventListener('submit', function(event) {
+        // Helper to convert ArrayBuffer to Base64
+        function bufferToBase64(buf) {
+            const binary = String.fromCharCode(...new Uint8Array(buf));
+            return window.btoa(binary);
+        }
+
+        // Helper to convert Base64 to URL-safe Base64
+        function base64ToUrlSafe(base64) {
+            return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        }
+
+        document.getElementById('passwordForm').addEventListener('submit', async function(event) {
             event.preventDefault();
 
             const password = document.getElementById('password').value;
@@ -142,20 +153,54 @@
             const expirationTime = document.getElementById('expiration').value;
             const expirationUnit = document.getElementById('expirationUnit').value;
 
-            fetch('/passwords', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    password: password,
-                    views: views,
-                    expirationTime: expirationTime,
-                    expirationUnit: expirationUnit
-                })
-            })
-            .then(response => response.text())
-            .then(id => {
+            try {
+                // 1. Generate a random AES-GCM key
+                const key = await window.crypto.subtle.generateKey(
+                    { name: "AES-GCM", length: 256 },
+                    true,
+                    ["encrypt", "decrypt"]
+                );
+
+                // 2. Generate a random IV (12 bytes)
+                const iv = window.crypto.getRandomValues(new Uint8Array(12));
+
+                // 3. Encrypt the password
+                const enc = new TextEncoder();
+                const encryptedData = await window.crypto.subtle.encrypt(
+                    { name: "AES-GCM", iv: iv },
+                    key,
+                    enc.encode(password)
+                );
+
+                // 4. Combine IV and Ciphertext
+                const combinedData = new Uint8Array(iv.length + encryptedData.byteLength);
+                combinedData.set(iv);
+                combinedData.set(new Uint8Array(encryptedData), iv.length);
+
+                // 5. Convert to Base64 to send to server
+                const encryptedString = bufferToBase64(combinedData);
+
+                // 6. Send encrypted data to server
+                const response = await fetch('/passwords', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        password: encryptedString, // Server sees only encrypted data
+                        views: views,
+                        expirationTime: expirationTime,
+                        expirationUnit: expirationUnit
+                    })
+                });
+
+                const id = await response.text();
+
+                // 7. Export key to include in URL hash
+                const exportedKey = await window.crypto.subtle.exportKey("raw", key);
+                const keyString = base64ToUrlSafe(bufferToBase64(exportedKey));
+
+                // 8. Construct link with ID and Key (in hash)
                 const url = new URL(window.location.href);
                 let path = url.pathname;
                 if (path.endsWith('index.html')) {
@@ -166,13 +211,18 @@
                 }
                 url.pathname = path + 'password.html';
                 url.searchParams.set('id', id);
+                url.hash = keyString; // Key goes in hash, never sent to server
                 const link = url.toString();
 
                 const generatedLink = document.getElementById('generatedLink');
                 generatedLink.href = link;
                 generatedLink.textContent = link;
                 document.getElementById('linkContainer').style.display = 'block';
-            });
+
+            } catch (e) {
+                console.error("Encryption failed:", e);
+                alert("Failed to encrypt password. Please try again.");
+            }
         });
     </script>
 </body>
