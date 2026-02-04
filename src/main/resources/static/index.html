@@ -35,7 +35,8 @@
             font-weight: 500;
         }
         input[type="password"],
-        input[type="number"] {
+        input[type="number"],
+        select {
             width: 100%;
             padding: 0.75rem;
             margin-bottom: 1rem;
@@ -44,10 +45,20 @@
             box-sizing: border-box;
             font-size: 1rem;
         }
-        input:focus {
+        input:focus, select:focus {
             border-color: #007bff;
             outline: none;
             box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+        }
+        .expiration-group {
+            display: flex;
+            gap: 10px;
+        }
+        .expiration-group input {
+            flex: 2;
+        }
+        .expiration-group select {
+            flex: 1;
         }
         button {
             width: 100%;
@@ -103,8 +114,16 @@
             <label for="views">Number of views</label>
             <input type="number" id="views" name="views" min="1" required value="1">
 
-            <label for="expiration">Expiration time (seconds)</label>
-            <input type="number" id="expiration" name="expiration" min="1" required value="60">
+            <label for="expiration">Expiration time</label>
+            <div class="expiration-group">
+                <input type="number" id="expiration" name="expiration" min="1" required value="60">
+                <select id="expirationUnit" name="expirationUnit">
+                    <option value="seconds">Seconds</option>
+                    <option value="minutes">Minutes</option>
+                    <option value="hours">Hours</option>
+                    <option value="days">Days</option>
+                </select>
+            </div>
 
             <button type="submit">Generate Link</button>
         </form>
@@ -121,6 +140,7 @@
             const password = document.getElementById('password').value;
             const views = document.getElementById('views').value;
             const expirationTime = document.getElementById('expiration').value;
+            const expirationUnit = document.getElementById('expirationUnit').value;
 
             fetch('/passwords', {
                 method: 'POST',
@@ -130,7 +150,8 @@
                 body: JSON.stringify({
                     password: password,
                     views: views,
-                    expirationTime: expirationTime
+                    expirationTime: expirationTime,
+                    expirationUnit: expirationUnit
                 })
             })
             .then(response => response.text())

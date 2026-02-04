@@ -40,6 +40,9 @@ public class PasswordService {
                     ops.unwatch();
                     return null;
                 }
+
+                // Get TTL before starting the transaction
+                Long ttl = ops.getExpire(id, TimeUnit.MILLISECONDS);
                 
                 entry.decrementViews();
                 
@@ -47,11 +50,14 @@ public class PasswordService {
                 if (entry.getRemainingViews() <= 0) {
                     ops.delete(id);
                 } else {
-                    Long ttl = ops.getExpire(id, TimeUnit.SECONDS);
                     if (ttl != null && ttl > 0) {
-                        ops.opsForValue().set(id, entry, ttl, TimeUnit.SECONDS);
-                    } else {
+                        ops.opsForValue().set(id, entry, ttl, TimeUnit.MILLISECONDS);
+                    } else if (ttl != null && ttl == -1) {
+                        // Preserve persistence if it was already persistent
                         ops.opsForValue().set(id, entry);
+                    } else {
+                        // Expired or invalid TTL, delete it
+                        ops.delete(id);
                     }
                 }
                 
